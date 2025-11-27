@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Organischer Halbmond - Transparent Verlauf</title>
+    <title>Organischer Halbmond - Animated</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -147,13 +147,31 @@
     <canvas id="mainCanvas"></canvas>
 
     <div class="controls-container">
+        <!-- Animation Controls (NEU) -->
+        <div class="row">
+            <label for="animCheck" style="margin:0; cursor:pointer; color: #ccfbf1; font-weight:bold;">Animation (Rotation)</label>
+            <input type="checkbox" id="animCheck">
+        </div>
+
+        <div class="control-group">
+            <label>
+                Tempo
+                <span id="speedVal" class="value">1x</span>
+            </label>
+            <!-- Wertebereich für Tempo -->
+            <input type="range" id="speedSlider" min="1" max="50" value="10">
+        </div>
+
+        <div class="divider"></div>
+
         <!-- Rotation -->
         <div class="control-group">
             <label>
                 Rotation
                 <span id="angleVal" class="value">160°</span>
             </label>
-            <input type="range" id="angleSlider" min="0" max="360" value="160">
+            <!-- Step auf 0.1 für flüssigere Animation -->
+            <input type="range" id="angleSlider" min="0" max="360" step="0.1" value="160">
         </div>
 
         <!-- Sichel Breite -->
@@ -183,7 +201,7 @@
             <input type="range" id="spacingSlider" min="10" max="60" value="15">
         </div>
 
-         <!-- Max Größe (Updated to 300) -->
+         <!-- Max Größe -->
          <div class="control-group">
             <label>
                 Max. Größe (proportional)
@@ -227,6 +245,8 @@
         
         // UI Elemente
         const els = {
+            anim: document.getElementById('animCheck'),
+            speed: { input: document.getElementById('speedSlider'), display: document.getElementById('speedVal') },
             angle: { input: document.getElementById('angleSlider'), display: document.getElementById('angleVal') },
             crescent: { input: document.getElementById('crescentSlider'), display: document.getElementById('crescentVal') },
             hardness: { input: document.getElementById('hardnessSlider'), display: document.getElementById('hardnessVal') },
@@ -239,6 +259,9 @@
 
         let width, height, minDim;
         const dpr = window.devicePixelRatio || 1;
+        
+        // Animation State
+        let animationFrameId;
 
         function resize() {
             width = window.innerWidth;
@@ -252,17 +275,15 @@
             canvas.style.height = `${height}px`;
             
             ctx.scale(dpr, dpr);
-            render();
+            if (!els.anim.checked) render();
         }
 
         function pseudoRandom(x, y) {
             return Math.abs(Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1;
         }
 
-        // Feste Farbe (Türkis), keine Interpolation mehr nötig
         const COLOR_CYAN_RGB = "0, 255, 255"; 
 
-        // Updated: Nimmt jetzt maxSizeFactor entgegen
         function getPlusPathData(x, y, scale, spacing, maxSizeFactor) {
             const maxSize = spacing * maxSizeFactor; 
             const size = maxSize * scale;
@@ -272,7 +293,6 @@
             return `M ${x-t} ${y-s} L ${x+t} ${y-s} L ${x+t} ${y-t} L ${x+s} ${y-t} L ${x+s} ${y+t} L ${x+t} ${y+t} L ${x+t} ${y+s} L ${x-t} ${y+s} L ${x-t} ${y+t} L ${x-s} ${y+t} L ${x-s} ${y-t} L ${x-t} ${y-t} Z`; 
         }
 
-        // Updated: Nimmt jetzt maxSizeFactor entgegen
         function drawSinglePathPlus(x, y, scale, spacing, sizeMode, maxSizeFactor) {
             ctx.beginPath();
             
@@ -280,18 +300,12 @@
             let alpha = scale;
 
             if (sizeMode) {
-                // Halftone Modus: Volle Deckkraft (Cyan), Größe variiert extrem
                 alpha = 1.0;
                 drawScale = Math.pow(scale, 1.5); 
-            } else {
-                // Transparenz Modus: Deckkraft variiert, Größe variiert normal
-                // Verlauf: Türkis -> Transparent
-                // Wir nutzen den scale-Wert direkt als Alpha
             }
             
             ctx.fillStyle = `rgba(${COLOR_CYAN_RGB}, ${alpha})`;
 
-            // Hier wird die neue maximale Größe angewendet
             const maxSize = spacing * maxSizeFactor; 
             const size = maxSize * drawScale;
             
@@ -316,22 +330,20 @@
         }
 
         function getRenderData() {
-            const angleDeg = parseInt(els.angle.input.value);
+            // angle wird als Float geparst für smootheren Input
+            const angleDeg = parseFloat(els.angle.input.value);
             const crescentFactor = parseInt(els.crescent.input.value) / 100; 
             const spacing = parseInt(els.spacing.input.value);
             const noiseFactor = parseInt(els.noise.input.value) / 100;
             const hardnessFactor = parseInt(els.hardness.input.value) / 100; 
-            const maxSizeFactor = parseInt(els.maxSize.input.value) / 100; // Neuer Faktor (0.1 - 3.0)
+            const maxSizeFactor = parseInt(els.maxSize.input.value) / 100; 
             const sizeMode = els.sizeMode.checked;
 
             const centerX = width / 2;
             const centerY = height / 2;
             const moonRadius = minDim * 0.35; 
             
-            // Schatten Berechnung
             const shadowOffset = moonRadius * crescentFactor; 
-            
-            // BlurSize Berechnung basierend auf Härte-Regler
             const blurFactor = 1.5 - (hardnessFactor * 1.4); 
             const blurSize = moonRadius * blurFactor;
 
@@ -339,7 +351,6 @@
             const shadowX = centerX - Math.cos(angleRad) * shadowOffset;
             const shadowY = centerY - Math.sin(angleRad) * shadowOffset;
 
-            // Scan Bereich
             const scanRadius = moonRadius + spacing + blurSize/2;
             const startCol = Math.floor((centerX - scanRadius) / spacing);
             const endCol = Math.ceil((centerX + scanRadius) / spacing);
@@ -358,11 +369,9 @@
 
                     const distToShadow = Math.hypot(x - shadowX, y - shadowY);
 
-                    // Intensity Berechnung
                     let intensity = (distToShadow - (moonRadius - blurSize * 0.5)) / blurSize;
                     intensity = Math.max(0, Math.min(1, intensity));
 
-                    // Organik
                     if (intensity < 0.95) {
                         const rand = pseudoRandom(i, j);
                         const noiseMod = 1.0 - (hardnessFactor * 0.5); 
@@ -380,28 +389,59 @@
                     }
                 }
             }
-            // maxSizeFactor wird hier zurückgegeben
             return { points, sizeMode, width, height, maxSizeFactor };
         }
 
         function render() {
-            els.angle.display.innerText = els.angle.input.value + "°";
+            // UI Update nur wenn nötig, um DOM-Zugriffe zu minimieren, 
+            // aber wir müssen die Angle-Anzeige updaten wenn animiert wird.
+            const angleVal = parseFloat(els.angle.input.value).toFixed(0);
+            els.angle.display.innerText = angleVal + "°";
+            
             els.crescent.display.innerText = (parseInt(els.crescent.input.value) / 100).toFixed(1);
             els.hardness.display.innerText = els.hardness.input.value + "%";
             els.spacing.display.innerText = els.spacing.input.value + "px";
-            els.maxSize.display.innerText = els.maxSize.input.value + "%"; // Display Update
+            els.maxSize.display.innerText = els.maxSize.input.value + "%";
             els.noise.display.innerText = els.noise.input.value + "%";
+            
+            // Tempo Anzeige formatieren
+            const speed = parseInt(els.speed.input.value);
+            els.speed.display.innerText = (speed / 10).toFixed(1) + "x";
 
-            // Canvas löschen (transparent)
             ctx.clearRect(0, 0, width, height);
 
             const data = getRenderData();
             
             data.points.forEach(p => {
-                // maxSizeFactor wird übergeben
                 drawSinglePathPlus(p.x, p.y, p.intensity, p.spacing, data.sizeMode, data.maxSizeFactor);
             });
         }
+
+        // Animation Loop
+        function animate() {
+            if (!els.anim.checked) return;
+
+            const speed = parseInt(els.speed.input.value);
+            // Geschwindigkeit skalieren: Basis 0.05 + Slider
+            const increment = speed * 0.05; 
+            
+            let currentAngle = parseFloat(els.angle.input.value);
+            currentAngle = (currentAngle + increment) % 360;
+            
+            els.angle.input.value = currentAngle;
+            
+            render();
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        // Toggle Animation
+        els.anim.addEventListener('change', () => {
+            if (els.anim.checked) {
+                animate();
+            } else {
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            }
+        });
 
         function exportSVG() {
             const data = getRenderData();
@@ -417,7 +457,6 @@
                 let drawScale = p.intensity;
                 let opacity = p.intensity.toFixed(2);
                 
-                // Konstante Farbe
                 let fill = `rgb(0, 255, 255)`;
 
                 if (data.sizeMode) {
@@ -425,7 +464,6 @@
                     drawScale = Math.pow(p.intensity, 1.5);
                 }
 
-                // maxSizeFactor wird übergeben
                 const d = getPlusPathData(p.x, p.y, drawScale, p.spacing, data.maxSizeFactor);
                 const opacityAttr = opacity === "1" ? "" : `fill-opacity="${opacity}"`;
                 
@@ -446,13 +484,15 @@
 
         window.addEventListener('resize', resize);
         
-        let rafId;
+        // Render Steuerung bei manuellen Inputs
         function queueRender() {
-            if (rafId) cancelAnimationFrame(rafId);
-            rafId = requestAnimationFrame(render);
+            // Wenn Animation läuft, brauchen wir kein queueRender, da loop läuft
+            if (els.anim.checked && this !== els.anim) return; 
+            render();
         }
 
         Object.values(els).forEach(el => {
+            if (el === els.anim) return; // Anim Listener ist separat
             if(el.input) el.input.addEventListener('input', queueRender);
             else el.addEventListener('change', queueRender); 
         });
