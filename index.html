@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EarthPlus-Gen</title>
+    <title>Organischer Halbmond - Animated</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -17,6 +17,8 @@
             height: 100vh;
             margin: 0;
             overflow: hidden;
+            user-select: none; /* Keine Textauswahl */
+            -webkit-user-select: none;
         }
 
         canvas {
@@ -42,6 +44,7 @@
             z-index: 10;
             max-height: 90vh; /* Schutz für kleine Screens */
             overflow-y: auto;
+            user-select: none; /* Keine Textauswahl im UI */
         }
 
         .control-group {
@@ -147,30 +150,12 @@
     <canvas id="mainCanvas"></canvas>
 
     <div class="controls-container">
-        <!-- Animation Controls (NEU) -->
-        <div class="row">
-            <label for="animCheck" style="margin:0; cursor:pointer; color: #ccfbf1; font-weight:bold;">Animation (Rotation)</label>
-            <input type="checkbox" id="animCheck">
-        </div>
-
-        <div class="control-group">
-            <label>
-                Tempo
-                <span id="speedVal" class="value">1x</span>
-            </label>
-            <!-- Wertebereich für Tempo -->
-            <input type="range" id="speedSlider" min="1" max="50" value="10">
-        </div>
-
-        <div class="divider"></div>
-
         <!-- Rotation -->
         <div class="control-group">
             <label>
                 Rotation
                 <span id="angleVal" class="value">160°</span>
             </label>
-            <!-- Step auf 0.1 für flüssigere Animation -->
             <input type="range" id="angleSlider" min="0" max="360" step="0.1" value="160">
         </div>
 
@@ -227,6 +212,36 @@
             <input type="checkbox" id="sizeModeCheck">
         </div>
 
+        <!-- Connections (NEU) -->
+        <div class="row">
+            <label for="connCheck" style="margin:0; cursor:pointer;">Connections</label>
+            <input type="checkbox" id="connCheck">
+        </div>
+
+        <div class="control-group">
+            <label>
+                Connection Dist
+                <span id="connDistVal" class="value">25px</span>
+            </label>
+            <input type="range" id="connDistSlider" min="10" max="100" value="25">
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Animation Controls (Verschoben nach unten) -->
+        <div class="row">
+            <label for="animCheck" style="margin:0; cursor:pointer; color: #ccfbf1; font-weight:bold;">Animation (Rotation)</label>
+            <input type="checkbox" id="animCheck">
+        </div>
+
+        <div class="control-group">
+            <label>
+                Tempo
+                <span id="speedVal" class="value">1x</span>
+            </label>
+            <input type="range" id="speedSlider" min="1" max="50" value="10">
+        </div>
+
         <div class="divider"></div>
 
         <!-- Export -->
@@ -254,6 +269,8 @@
             maxSize: { input: document.getElementById('maxSizeSlider'), display: document.getElementById('maxSizeVal') },
             noise: { input: document.getElementById('noiseSlider'), display: document.getElementById('noiseVal') },
             sizeMode: document.getElementById('sizeModeCheck'),
+            conn: document.getElementById('connCheck'),
+            connDist: { input: document.getElementById('connDistSlider'), display: document.getElementById('connDistVal') },
             bgExport: document.getElementById('bgExportCheck')
         };
 
@@ -338,6 +355,9 @@
             const hardnessFactor = parseInt(els.hardness.input.value) / 100; 
             const maxSizeFactor = parseInt(els.maxSize.input.value) / 100; 
             const sizeMode = els.sizeMode.checked;
+            // Connections
+            const showConn = els.conn.checked;
+            const connDist = parseInt(els.connDist.input.value);
 
             const centerX = width / 2;
             const centerY = height / 2;
@@ -389,22 +409,19 @@
                     }
                 }
             }
-            return { points, sizeMode, width, height, maxSizeFactor };
+            return { points, sizeMode, width, height, maxSizeFactor, showConn, connDist };
         }
 
         function render() {
-            // UI Update nur wenn nötig, um DOM-Zugriffe zu minimieren, 
-            // aber wir müssen die Angle-Anzeige updaten wenn animiert wird.
+            // UI Update
             const angleVal = parseFloat(els.angle.input.value).toFixed(0);
             els.angle.display.innerText = angleVal + "°";
-            
             els.crescent.display.innerText = (parseInt(els.crescent.input.value) / 100).toFixed(1);
             els.hardness.display.innerText = els.hardness.input.value + "%";
             els.spacing.display.innerText = els.spacing.input.value + "px";
             els.maxSize.display.innerText = els.maxSize.input.value + "%";
             els.noise.display.innerText = els.noise.input.value + "%";
-            
-            // Tempo Anzeige formatieren
+            els.connDist.display.innerText = els.connDist.input.value + "px";
             const speed = parseInt(els.speed.input.value);
             els.speed.display.innerText = (speed / 10).toFixed(1) + "x";
 
@@ -412,6 +429,42 @@
 
             const data = getRenderData();
             
+            // 1. Draw Connections (Lines) first (behind symbols)
+            if (data.showConn) {
+                const maxDist = data.connDist;
+                ctx.lineWidth = 0.5;
+                
+                // Optimierung: Punkte sind grob nach X sortiert, da Spaltenweise generiert
+                for (let i = 0; i < data.points.length; i++) {
+                    const p1 = data.points[i];
+                    
+                    // Wir schauen uns nur nachfolgende Punkte an, um Duplikate zu vermeiden
+                    for (let j = i + 1; j < data.points.length; j++) {
+                        const p2 = data.points[j];
+                        
+                        // Abbruchbedingung für X (Da sortiert)
+                        const dx = p2.x - p1.x;
+                        if (dx > maxDist) break; 
+                        
+                        const dy = Math.abs(p2.y - p1.y);
+                        if (dy > maxDist) continue;
+
+                        const dist = Math.hypot(dx, dy);
+                        if (dist <= maxDist) {
+                            // Opacity sinkt mit Distanz
+                            const opacity = (1 - dist / maxDist) * 0.4; // Max 0.4 alpha
+                            
+                            ctx.beginPath();
+                            ctx.strokeStyle = `rgba(0, 255, 255, ${opacity})`;
+                            ctx.moveTo(p1.x, p1.y);
+                            ctx.lineTo(p2.x, p2.y);
+                            ctx.stroke();
+                        }
+                    }
+                }
+            }
+
+            // 2. Draw Symbols
             data.points.forEach(p => {
                 drawSinglePathPlus(p.x, p.y, p.intensity, p.spacing, data.sizeMode, data.maxSizeFactor);
             });
@@ -422,7 +475,6 @@
             if (!els.anim.checked) return;
 
             const speed = parseInt(els.speed.input.value);
-            // Geschwindigkeit skalieren: Basis 0.05 + Slider
             const increment = speed * 0.05; 
             
             let currentAngle = parseFloat(els.angle.input.value);
@@ -434,7 +486,6 @@
             animationFrameId = requestAnimationFrame(animate);
         }
 
-        // Toggle Animation
         els.anim.addEventListener('change', () => {
             if (els.anim.checked) {
                 animate();
@@ -450,13 +501,46 @@
             let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${data.width} ${data.height}" width="${data.width}px" height="${data.height}px">`;
             
             if (includeBg) {
-                svg += `<rect width="100%" height="100%" fill="#000510"/>`;
+                // Gradient Definition hinzufügen um CSS radial-gradient zu matchen
+                svg += `
+                <defs>
+                    <radialGradient id="bgGrad" cx="50%" cy="50%" r="71%" fx="50%" fy="50%">
+                        <stop offset="0%" style="stop-color:#001e45;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#000510;stop-opacity:1" />
+                    </radialGradient>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#bgGrad)"/>
+                `;
             }
 
+            // 1. Export Connections
+            if (data.showConn) {
+                const maxDist = data.connDist;
+                let linesSvg = "";
+                
+                for (let i = 0; i < data.points.length; i++) {
+                    const p1 = data.points[i];
+                    for (let j = i + 1; j < data.points.length; j++) {
+                        const p2 = data.points[j];
+                        const dx = p2.x - p1.x;
+                        if (dx > maxDist) break;
+                        const dy = Math.abs(p2.y - p1.y);
+                        if (dy > maxDist) continue;
+
+                        const dist = Math.hypot(dx, dy);
+                        if (dist <= maxDist) {
+                            const opacity = ((1 - dist / maxDist) * 0.4).toFixed(3);
+                            linesSvg += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="rgb(0, 255, 255)" stroke-opacity="${opacity}" stroke-width="0.5" />`;
+                        }
+                    }
+                }
+                svg += linesSvg;
+            }
+
+            // 2. Export Symbols
             data.points.forEach(p => {
                 let drawScale = p.intensity;
                 let opacity = p.intensity.toFixed(2);
-                
                 let fill = `rgb(0, 255, 255)`;
 
                 if (data.sizeMode) {
@@ -484,15 +568,13 @@
 
         window.addEventListener('resize', resize);
         
-        // Render Steuerung bei manuellen Inputs
         function queueRender() {
-            // Wenn Animation läuft, brauchen wir kein queueRender, da loop läuft
             if (els.anim.checked && this !== els.anim) return; 
             render();
         }
 
         Object.values(els).forEach(el => {
-            if (el === els.anim) return; // Anim Listener ist separat
+            if (el === els.anim) return; 
             if(el.input) el.input.addEventListener('input', queueRender);
             else el.addEventListener('change', queueRender); 
         });
