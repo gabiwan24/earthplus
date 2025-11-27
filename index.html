@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Organischer Halbmond - Animated</title>
+    <title>Organischer Halbmond - Animated & Colors</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
-            /* Hintergrund: Ein tiefer blauer Verlauf ("Blaufläche") statt flachem Schwarz */
+            /* Hintergrund: Ein tiefer blauer Verlauf */
             background: radial-gradient(circle at center, #001e45 0%, #000510 100%);
             color: #ccfbf1; 
             display: flex;
@@ -17,34 +17,52 @@
             height: 100vh;
             margin: 0;
             overflow: hidden;
-            user-select: none; /* Keine Textauswahl */
+            user-select: none;
             -webkit-user-select: none;
         }
 
         canvas {
-            /* Canvas ist transparent, damit der Body-Gradient durchscheint */
             background-color: transparent; 
             touch-action: none; 
         }
 
-        .controls-container {
+        /* Container Wrapper für Stapelung unten links */
+        .ui-sidebar {
             position: absolute;
             bottom: 20px;
             left: 20px;
+            display: flex;
+            flex-direction: column-reverse; /* Damit das Main Panel unten ist */
+            gap: 15px;
+            width: 320px;
+            z-index: 10;
+            pointer-events: none; /* Klicks gehen durch leere Bereiche durch */
+        }
+
+        /* Gemeinsamer Style für Panels */
+        .panel {
             background: rgba(0, 5, 16, 0.85);
             backdrop-filter: blur(12px);
-            padding: 20px;
+            padding: 16px;
             border-radius: 8px;
             border: 1px solid #083344;
-            width: 320px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            pointer-events: auto; /* Klicks aktivieren */
+        }
+
+        .main-controls {
+            max-height: 60vh;
+            overflow-y: auto;
             display: flex;
             flex-direction: column;
             gap: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-            z-index: 10;
-            max-height: 90vh; /* Schutz für kleine Screens */
-            overflow-y: auto;
-            user-select: none; /* Keine Textauswahl im UI */
+        }
+
+        .color-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            border: 1px solid #22d3ee55; /* Etwas hellerer Border um es hervorzuheben */
         }
 
         .control-group {
@@ -57,6 +75,19 @@
             justify-content: space-between;
             align-items: center;
             gap: 10px;
+            min-height: 24px;
+        }
+
+        .row-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .row-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
         label {
@@ -67,6 +98,21 @@
             font-family: monospace;
             margin-bottom: 4px;
             width: 100%;
+        }
+
+        /* Label ohne width für Flexbox rows */
+        .lbl-inline {
+            font-size: 0.8rem;
+            color: #ccfbf1;
+            font-weight: bold;
+            font-family: monospace;
+            cursor: pointer;
+        }
+        
+        .lbl-sub {
+             font-size: 0.7rem; 
+             color: #22d3ee;
+             cursor: pointer;
         }
 
         span.value {
@@ -106,6 +152,26 @@
             cursor: pointer;
         }
 
+        /* Color Input Styling */
+        input[type=color] {
+            -webkit-appearance: none;
+            border: none;
+            width: 100%;
+            height: 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            background: none;
+            padding: 0;
+            overflow: hidden;
+        }
+        input[type=color]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        input[type=color]::-webkit-color-swatch {
+            border: 1px solid #334155;
+            border-radius: 4px;
+        }
+
         button {
             background: linear-gradient(135deg, #06b6d4, #22d3ee);
             color: #000510;
@@ -130,16 +196,17 @@
             height: 1px;
             background-color: #1e293b;
             margin: 5px 0;
+            width: 100%;
         }
         
-        /* Scrollbar styling für controls container falls nötig */
-        .controls-container::-webkit-scrollbar {
+        /* Scrollbar styling */
+        .main-controls::-webkit-scrollbar {
             width: 6px;
         }
-        .controls-container::-webkit-scrollbar-track {
+        .main-controls::-webkit-scrollbar-track {
             background: #000510;
         }
-        .controls-container::-webkit-scrollbar-thumb {
+        .main-controls::-webkit-scrollbar-thumb {
             background: #1e293b;
             border-radius: 3px;
         }
@@ -149,123 +216,157 @@
 
     <canvas id="mainCanvas"></canvas>
 
-    <div class="controls-container">
-        <!-- Rotation -->
-        <div class="control-group">
-            <label>
-                Rotation
-                <span id="angleVal" class="value">160°</span>
-            </label>
-            <input type="range" id="angleSlider" min="0" max="360" step="0.1" value="160">
-        </div>
-
-        <!-- Sichel Breite -->
-        <div class="control-group">
-            <label>
-                Sichel-Breite
-                <span id="crescentVal" class="value">0.6</span>
-            </label>
-            <input type="range" id="crescentSlider" min="40" max="150" value="60">
-        </div>
-
-        <!-- Verlaufshärte -->
-        <div class="control-group">
-            <label>
-                Verlaufshärte
-                <span id="hardnessVal" class="value">50%</span>
-            </label>
-            <input type="range" id="hardnessSlider" min="0" max="100" value="50">
-        </div>
-
-        <!-- Raster Abstand -->
-        <div class="control-group">
-            <label>
-                Raster-Abstand
-                <span id="spacingVal" class="value">15px</span>
-            </label>
-            <input type="range" id="spacingSlider" min="10" max="60" value="15">
-        </div>
-
-         <!-- Max Größe -->
-         <div class="control-group">
-            <label>
-                Max. Größe (proportional)
-                <span id="maxSizeVal" class="value">90%</span>
-            </label>
-            <input type="range" id="maxSizeSlider" min="10" max="300" value="90">
-        </div>
-
-        <!-- Organik / Rauschen -->
-        <div class="control-group">
-            <label>
-                Organisches Ausfransen
-                <span id="noiseVal" class="value">60%</span>
-            </label>
-            <input type="range" id="noiseSlider" min="0" max="100" value="60">
-        </div>
-
-        <div class="divider"></div>
-
-        <!-- Helligkeit Modus -->
-        <div class="row">
-            <label for="sizeModeCheck" style="margin:0; cursor:pointer;">Größe steuert Helligkeit</label>
-            <input type="checkbox" id="sizeModeCheck">
-        </div>
-
-        <!-- Connections (NEU) -->
-        <div class="row">
-            <label for="connCheck" style="margin:0; cursor:pointer;">Connections</label>
-            <div style="display:flex; gap:10px; align-items:center;">
-                 <label for="randConnCheck" style="margin:0; cursor:pointer; font-size: 0.7rem; color: #22d3ee;">Random</label>
-                 <input type="checkbox" id="randConnCheck">
-                 <input type="checkbox" id="connCheck">
-            </div>
-        </div>
-
-        <!-- Connection Factor Slider (Update) -->
-        <div class="control-group">
-            <label>
-                Connection Dist (Faktor)
-                <span id="connFactorVal" class="value">1.5x</span>
-            </label>
-            <input type="range" id="connFactorSlider" min="10" max="50" value="18">
-        </div>
+    <div class="ui-sidebar">
         
-        <!-- Max Lines Slider (Neu) -->
-        <div class="control-group">
-            <label>
-                Anzahl Linien (Max)
-                <span id="maxLinesVal" class="value">3</span>
-            </label>
-            <input type="range" id="maxLinesSlider" min="1" max="10" value="3">
-        </div>
+        <!-- MAIN CONTROLS (Unten) -->
+        <div class="panel main-controls">
+            <!-- Rotation -->
+            <div class="control-group">
+                <label>
+                    Rotation
+                    <span id="angleVal" class="value">160°</span>
+                </label>
+                <input type="range" id="angleSlider" min="0" max="360" step="0.1" value="160">
+            </div>
 
-        <div class="divider"></div>
+            <!-- Sichel Breite -->
+            <div class="control-group">
+                <label>
+                    Sichel-Breite
+                    <span id="crescentVal" class="value">0.6</span>
+                </label>
+                <input type="range" id="crescentSlider" min="40" max="150" value="60">
+            </div>
 
-        <!-- Animation Controls (Verschoben nach unten) -->
-        <div class="row">
-            <label for="animCheck" style="margin:0; cursor:pointer; color: #ccfbf1; font-weight:bold;">Animation (Rotation)</label>
-            <input type="checkbox" id="animCheck">
-        </div>
+            <!-- Verlaufshärte -->
+            <div class="control-group">
+                <label>
+                    Verlaufshärte
+                    <span id="hardnessVal" class="value">50%</span>
+                </label>
+                <input type="range" id="hardnessSlider" min="0" max="100" value="50">
+            </div>
 
-        <div class="control-group">
-            <label>
-                Tempo
-                <span id="speedVal" class="value">1x</span>
-            </label>
-            <input type="range" id="speedSlider" min="1" max="50" value="10">
-        </div>
+            <!-- Raster Abstand -->
+            <div class="control-group">
+                <label>
+                    Raster-Abstand
+                    <span id="spacingVal" class="value">15px</span>
+                </label>
+                <input type="range" id="spacingSlider" min="10" max="60" value="15">
+            </div>
 
-        <div class="divider"></div>
+             <!-- Max Größe -->
+             <div class="control-group">
+                <label>
+                    Max. Größe
+                    <span id="maxSizeVal" class="value">90%</span>
+                </label>
+                <input type="range" id="maxSizeSlider" min="10" max="300" value="90">
+            </div>
 
-        <!-- Export -->
-        <div class="row">
-            <button onclick="exportSVG()">SVG Export</button>
-            <div style="display:flex; align-items:center; gap:5px;">
-                <input type="checkbox" id="bgExportCheck" checked>
-                <label for="bgExportCheck" style="margin:0; font-size:0.7rem; width:auto;">Hintergrund</label>
+            <!-- Organik / Rauschen -->
+            <div class="control-group">
+                <label>
+                    Organisches Ausfransen
+                    <span id="noiseVal" class="value">60%</span>
+                </label>
+                <input type="range" id="noiseSlider" min="0" max="100" value="60">
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Helligkeit Modus -->
+            <div class="row">
+                <label for="sizeModeCheck" class="lbl-inline" style="font-weight:normal; color:#94a3b8;">Größe steuert Helligkeit</label>
+                <input type="checkbox" id="sizeModeCheck">
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Connections -->
+            <div class="row">
+                <div class="row-left">
+                    <label for="connCheck" class="lbl-inline">Connections</label>
+                    <input type="checkbox" id="connCheck">
+                </div>
+                <div class="row-right">
+                    <label for="randConnCheck" class="lbl-sub">Random</label>
+                    <input type="checkbox" id="randConnCheck">
+                </div>
+            </div>
+
+            <!-- Connection Settings -->
+            <div class="control-group">
+                <label>
+                    Connection Dist (Faktor)
+                    <span id="connFactorVal" class="value">1.5x</span>
+                </label>
+                <input type="range" id="connFactorSlider" min="10" max="50" value="18">
+            </div>
+            
+            <div class="control-group">
+                <label>
+                    Anzahl Linien (Max)
+                    <span id="maxLinesVal" class="value">3</span>
+                </label>
+                <input type="range" id="maxLinesSlider" min="1" max="10" value="3">
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Animation Controls -->
+            <div class="row">
+                <div class="row-left">
+                     <label for="animCheck" class="lbl-inline">Animation</label>
+                     <input type="checkbox" id="animCheck">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>
+                    Tempo
+                    <span id="speedVal" class="value">1x</span>
+                </label>
+                <input type="range" id="speedSlider" min="1" max="50" value="10">
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Export -->
+            <div class="row">
+                <button onclick="exportSVG()">SVG Export</button>
+                <div style="display:flex; align-items:center; gap:5px;">
+                    <input type="checkbox" id="bgExportCheck" checked>
+                    <label for="bgExportCheck" style="margin:0; font-size:0.7rem; width:auto;">Hintergrund</label>
+                </div>
             </div>
         </div>
+
+        <!-- COLOR PANEL (Oben / Separiert) -->
+        <div class="panel color-panel">
+            <div class="row">
+                <div class="row-left">
+                    <label for="multiColorCheck" class="lbl-inline">Colors</label>
+                    <input type="checkbox" id="multiColorCheck">
+                </div>
+                <div class="row-right">
+                     <label for="cloudsColorCheck" class="lbl-sub">Clouds</label>
+                     <input type="checkbox" id="cloudsColorCheck">
+
+                     <label for="randColorCheck" class="lbl-sub">Random</label>
+                     <input type="checkbox" id="randColorCheck">
+                </div>
+            </div>
+
+            <div class="row" style="gap:5px;">
+                <input type="color" id="color1" value="#00c167" title="Color 1">
+                <input type="color" id="color2" value="#008cff" title="Color 2">
+                <input type="color" id="color3" value="#ffa6b4" title="Color 3">
+                <input type="color" id="color4" value="#822faa" title="Color 4">
+            </div>
+        </div>
+
     </div>
 
     <script>
@@ -283,17 +384,26 @@
             maxSize: { input: document.getElementById('maxSizeSlider'), display: document.getElementById('maxSizeVal') },
             noise: { input: document.getElementById('noiseSlider'), display: document.getElementById('noiseVal') },
             sizeMode: document.getElementById('sizeModeCheck'),
+            // Connection
             conn: document.getElementById('connCheck'),
             connRandom: document.getElementById('randConnCheck'),
             connFactor: { input: document.getElementById('connFactorSlider'), display: document.getElementById('connFactorVal') },
             maxLines: { input: document.getElementById('maxLinesSlider'), display: document.getElementById('maxLinesVal') },
-            bgExport: document.getElementById('bgExportCheck')
+            bgExport: document.getElementById('bgExportCheck'),
+            // Color Elements
+            multiColor: document.getElementById('multiColorCheck'),
+            randColor: document.getElementById('randColorCheck'),
+            cloudsColor: document.getElementById('cloudsColorCheck'),
+            colors: [
+                document.getElementById('color1'),
+                document.getElementById('color2'),
+                document.getElementById('color3'),
+                document.getElementById('color4')
+            ]
         };
 
         let width, height, minDim;
         const dpr = window.devicePixelRatio || 1;
-        
-        // Animation State
         let animationFrameId;
 
         function resize() {
@@ -311,23 +421,66 @@
             if (!els.anim.checked) render();
         }
 
-        // Deterministischer Zufall für Positions-basierte Logik
         function pseudoRandom(x, y) {
             return Math.abs(Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1;
         }
 
-        const COLOR_CYAN_RGB = "0, 255, 255"; 
+        // Noise Function für die Clouds (weiche Gradienten)
+        // Einfache Überlagerung von Sinuswellen
+        function cloudNoise(x, y) {
+            const scale = 0.003;
+            const v1 = Math.sin(x * scale + y * scale * 0.5);
+            const v2 = Math.cos(x * scale * 0.5 - y * scale);
+            const v3 = Math.sin(x * scale * 0.2 + y * scale * 0.2 + 2);
+            
+            // Normalize -1 to 1 -> 0 to 1
+            const val = (v1 + v2 + v3) / 3; 
+            return val * 0.5 + 0.5;
+        }
+
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? [
+                parseInt(result[1], 16),
+                parseInt(result[2], 16),
+                parseInt(result[3], 16)
+            ] : [0, 255, 255];
+        }
+
+        // Interpolation zwischen 4 Farben basierend auf t (0 bis 1)
+        function getGradientColor(t, colors) {
+            // Clamp t
+            t = Math.max(0, Math.min(1, t));
+            
+            let c1, c2, localT;
+            if (t < 0.33) {
+                c1 = colors[0]; c2 = colors[1];
+                localT = t / 0.33;
+            } else if (t < 0.66) {
+                c1 = colors[1]; c2 = colors[2];
+                localT = (t - 0.33) / 0.33;
+            } else {
+                c1 = colors[2]; c2 = colors[3];
+                localT = (t - 0.66) / 0.34;
+            }
+
+            const r = Math.round(c1[0] + (c2[0] - c1[0]) * localT);
+            const g = Math.round(c1[1] + (c2[1] - c1[1]) * localT);
+            const b = Math.round(c1[2] + (c2[2] - c1[2]) * localT);
+            return [r, g, b];
+        }
+
+        const COLOR_CYAN_RGB = [0, 255, 255]; 
 
         function getPlusPathData(x, y, scale, spacing, maxSizeFactor) {
             const maxSize = spacing * maxSizeFactor; 
             const size = maxSize * scale;
             const s = size / 2;
             const t = Math.max(0.5, size * 0.15); 
-
             return `M ${x-t} ${y-s} L ${x+t} ${y-s} L ${x+t} ${y-t} L ${x+s} ${y-t} L ${x+s} ${y+t} L ${x+t} ${y+t} L ${x+t} ${y+s} L ${x-t} ${y+s} L ${x-t} ${y+t} L ${x-s} ${y+t} L ${x-s} ${y-t} L ${x-t} ${y-t} Z`; 
         }
 
-        function drawSinglePathPlus(x, y, scale, spacing, sizeMode, maxSizeFactor) {
+        function drawSinglePathPlus(x, y, scale, spacing, sizeMode, maxSizeFactor, colorRgb) {
             ctx.beginPath();
             
             let drawScale = scale;
@@ -338,7 +491,7 @@
                 drawScale = Math.pow(scale, 1.5); 
             }
             
-            ctx.fillStyle = `rgba(${COLOR_CYAN_RGB}, ${alpha})`;
+            ctx.fillStyle = `rgba(${colorRgb[0]}, ${colorRgb[1]}, ${colorRgb[2]}, ${alpha})`;
 
             const maxSize = spacing * maxSizeFactor; 
             const size = maxSize * drawScale;
@@ -358,13 +511,11 @@
             ctx.lineTo(x - s, y + t); 
             ctx.lineTo(x - s, y - t); 
             ctx.lineTo(x - t, y - t); 
-            
             ctx.closePath();
             ctx.fill();
         }
 
         function getRenderData() {
-            // angle wird als Float geparst für smootheren Input
             const angleDeg = parseFloat(els.angle.input.value);
             const crescentFactor = parseInt(els.crescent.input.value) / 100; 
             const spacing = parseInt(els.spacing.input.value);
@@ -376,11 +527,15 @@
             // Connections Config
             const showConn = els.conn.checked;
             const randomConn = els.connRandom.checked;
-            const connFactor = parseInt(els.connFactor.input.value) / 10; // 1.0 bis 5.0
+            const connFactor = parseInt(els.connFactor.input.value) / 10; 
             const maxLines = parseInt(els.maxLines.input.value);
-            
-            // Die Distanz skaliert nun mit dem Rasterabstand
             const connDist = spacing * connFactor; 
+
+            // Color Config
+            const isMultiColor = els.multiColor.checked;
+            const isRandomColor = els.randColor.checked;
+            const isCloudsColor = els.cloudsColor.checked;
+            const activeColors = els.colors.map(el => hexToRgb(el.value));
 
             const centerX = width / 2;
             const centerY = height / 2;
@@ -419,16 +574,29 @@
                         const rand = pseudoRandom(i, j);
                         const noiseMod = 1.0 - (hardnessFactor * 0.5); 
                         const dropoutThreshold = (1 - intensity) * noiseFactor * 2.0 * noiseMod;
-
                         if (rand < dropoutThreshold) continue;
-                        
-                        if (noiseFactor > 0) {
-                             intensity *= (1 - (rand * noiseFactor * 0.3));
-                        }
+                        if (noiseFactor > 0) intensity *= (1 - (rand * noiseFactor * 0.3));
                     }
 
                     if (intensity > 0.05) {
-                        points.push({x, y, intensity, spacing});
+                        let ptColor = COLOR_CYAN_RGB;
+                        if (isMultiColor) {
+                            if (isRandomColor) {
+                                // Random
+                                const randVal = pseudoRandom(i * 13, j * 7);
+                                const index = Math.floor(randVal * 4);
+                                ptColor = activeColors[index];
+                            } else if (isCloudsColor) {
+                                // Clouds (Noise Gradient)
+                                const t = cloudNoise(x, y);
+                                ptColor = getGradientColor(t, activeColors);
+                            } else {
+                                // Standard Gradient (Linear)
+                                let t = x / width;
+                                ptColor = getGradientColor(t, activeColors);
+                            }
+                        }
+                        points.push({x, y, intensity, spacing, color: ptColor});
                     }
                 }
             }
@@ -443,15 +611,10 @@
                 const p1 = data.points[i];
                 let candidates = [];
                 
-                // Wir sammeln potenzielle Kandidaten. 
-                // Da Punkte sortiert sind, schauen wir nur vorwärts um Duplikate zu vermeiden, 
-                // ABER für "Random" Logik schauen wir auch vorwärts, um eine verzweigte Struktur zu erzeugen.
-                // Um es effizient zu halten, bleiben wir beim "forward scanning".
-                
                 for (let j = i + 1; j < data.points.length; j++) {
                     const p2 = data.points[j];
                     const dx = p2.x - p1.x;
-                    if (dx > maxDist) break; // Optimierung: Da sortiert nach Spalten/X
+                    if (dx > maxDist) break;
                     
                     const dy = Math.abs(p2.y - p1.y);
                     if (dy > maxDist) continue;
@@ -464,23 +627,17 @@
 
                 if (candidates.length === 0) continue;
 
-                // Sortier-Logik
                 if (data.randomConn) {
-                    // Deterministisches "Random" basierend auf Koordinaten
-                    // Damit es nicht flackert und im SVG gleich aussieht.
                     candidates.sort((a, b) => {
                         const rA = pseudoRandom(p1.x + a.point.x, p1.y + a.point.y);
                         const rB = pseudoRandom(p1.x + b.point.x, p1.y + b.point.y);
                         return rA - rB;
                     });
                 } else {
-                    // Sortiere nach Distanz (nächste zuerst)
                     candidates.sort((a, b) => a.dist - b.dist);
                 }
 
-                // Limit anwenden
                 const count = Math.min(candidates.length, data.maxLines);
-                
                 for(let k=0; k < count; k++) {
                     lines.push({
                         p1: p1,
@@ -493,7 +650,7 @@
         }
 
         function render() {
-            // UI Update
+            // UI Text Updates
             const angleVal = parseFloat(els.angle.input.value).toFixed(0);
             els.angle.display.innerText = angleVal + "°";
             els.crescent.display.innerText = (parseInt(els.crescent.input.value) / 100).toFixed(1);
@@ -502,25 +659,22 @@
             els.maxSize.display.innerText = els.maxSize.input.value + "%";
             els.noise.display.innerText = els.noise.input.value + "%";
             els.maxLines.display.innerText = els.maxLines.input.value;
-            
             const connFact = parseInt(els.connFactor.input.value) / 10;
             els.connFactor.display.innerText = connFact.toFixed(1) + "x";
-
             const speed = parseInt(els.speed.input.value);
             els.speed.display.innerText = (speed / 10).toFixed(1) + "x";
 
             ctx.clearRect(0, 0, width, height);
-
             const data = getRenderData();
             
             // 1. Draw Connections
             if (data.showConn) {
                 const lines = calculateConnections(data);
                 ctx.lineWidth = 0.5;
-                
                 lines.forEach(line => {
                     ctx.beginPath();
-                    ctx.strokeStyle = `rgba(0, 255, 255, ${line.opacity})`;
+                    const c = line.p1.color;
+                    ctx.strokeStyle = `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${line.opacity})`;
                     ctx.moveTo(line.p1.x, line.p1.y);
                     ctx.lineTo(line.p2.x, line.p2.y);
                     ctx.stroke();
@@ -529,32 +683,24 @@
 
             // 2. Draw Symbols
             data.points.forEach(p => {
-                drawSinglePathPlus(p.x, p.y, p.intensity, p.spacing, data.sizeMode, data.maxSizeFactor);
+                drawSinglePathPlus(p.x, p.y, p.intensity, p.spacing, data.sizeMode, data.maxSizeFactor, p.color);
             });
         }
 
-        // Animation Loop
         function animate() {
             if (!els.anim.checked) return;
-
             const speed = parseInt(els.speed.input.value);
             const increment = speed * 0.05; 
-            
             let currentAngle = parseFloat(els.angle.input.value);
             currentAngle = (currentAngle + increment) % 360;
-            
             els.angle.input.value = currentAngle;
-            
             render();
             animationFrameId = requestAnimationFrame(animate);
         }
 
         els.anim.addEventListener('change', () => {
-            if (els.anim.checked) {
-                animate();
-            } else {
-                if (animationFrameId) cancelAnimationFrame(animationFrameId);
-            }
+            if (els.anim.checked) animate();
+            else if (animationFrameId) cancelAnimationFrame(animationFrameId);
         });
 
         function exportSVG() {
@@ -575,48 +721,41 @@
                 `;
             }
 
-            // 1. Export Connections
             if (data.showConn) {
                 const lines = calculateConnections(data);
-                
                 lines.forEach(line => {
-                     // SVG opacity auf 3 Dezimalstellen runden
                      const op = line.opacity.toFixed(3);
-                     svg += `<line x1="${line.p1.x}" y1="${line.p1.y}" x2="${line.p2.x}" y2="${line.p2.y}" stroke="rgb(0, 255, 255)" stroke-opacity="${op}" stroke-width="0.5" />`;
+                     const c = line.p1.color;
+                     const colStr = `rgb(${c[0]},${c[1]},${c[2]})`;
+                     svg += `<line x1="${line.p1.x}" y1="${line.p1.y}" x2="${line.p2.x}" y2="${line.p2.y}" stroke="${colStr}" stroke-opacity="${op}" stroke-width="0.5" />`;
                 });
             }
 
-            // 2. Export Symbols
             data.points.forEach(p => {
                 let drawScale = p.intensity;
                 let opacity = p.intensity.toFixed(2);
-                let fill = `rgb(0, 255, 255)`;
-
+                let fill = `rgb(${p.color[0]}, ${p.color[1]}, ${p.color[2]})`;
                 if (data.sizeMode) {
                     opacity = "1";
                     drawScale = Math.pow(p.intensity, 1.5);
                 }
-
                 const d = getPlusPathData(p.x, p.y, drawScale, p.spacing, data.maxSizeFactor);
                 const opacityAttr = opacity === "1" ? "" : `fill-opacity="${opacity}"`;
-                
                 svg += `<path d="${d}" fill="${fill}" ${opacityAttr} />`;
             });
 
             svg += `</svg>`;
-
             const blob = new Blob([svg], {type: "image/svg+xml;charset=utf-8"});
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
-            link.download = `moon_transparent_${Date.now()}.svg`;
+            link.download = `moon_pattern_${Date.now()}.svg`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
         }
 
         window.addEventListener('resize', resize);
-        
         function queueRender() {
             if (els.anim.checked && this !== els.anim) return; 
             render();
@@ -624,12 +763,15 @@
 
         Object.values(els).forEach(el => {
             if (el === els.anim) return; 
-            if(el.input) el.input.addEventListener('input', queueRender);
-            else el.addEventListener('change', queueRender); 
+            if (Array.isArray(el)) {
+                el.forEach(c => c.addEventListener('input', queueRender));
+            } else {
+                if(el.input) el.input.addEventListener('input', queueRender);
+                else el.addEventListener('change', queueRender); 
+            }
         });
 
         setTimeout(resize, 100); 
-
     </script>
 </body>
 </html>
