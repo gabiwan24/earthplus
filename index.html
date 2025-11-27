@@ -215,15 +215,29 @@
         <!-- Connections (NEU) -->
         <div class="row">
             <label for="connCheck" style="margin:0; cursor:pointer;">Connections</label>
-            <input type="checkbox" id="connCheck">
+            <div style="display:flex; gap:10px; align-items:center;">
+                 <label for="randConnCheck" style="margin:0; cursor:pointer; font-size: 0.7rem; color: #22d3ee;">Random</label>
+                 <input type="checkbox" id="randConnCheck">
+                 <input type="checkbox" id="connCheck">
+            </div>
         </div>
 
+        <!-- Connection Factor Slider (Update) -->
         <div class="control-group">
             <label>
-                Connection Dist
-                <span id="connDistVal" class="value">25px</span>
+                Connection Dist (Faktor)
+                <span id="connFactorVal" class="value">1.5x</span>
             </label>
-            <input type="range" id="connDistSlider" min="10" max="100" value="25">
+            <input type="range" id="connFactorSlider" min="10" max="50" value="18">
+        </div>
+        
+        <!-- Max Lines Slider (Neu) -->
+        <div class="control-group">
+            <label>
+                Anzahl Linien (Max)
+                <span id="maxLinesVal" class="value">3</span>
+            </label>
+            <input type="range" id="maxLinesSlider" min="1" max="10" value="3">
         </div>
 
         <div class="divider"></div>
@@ -270,7 +284,9 @@
             noise: { input: document.getElementById('noiseSlider'), display: document.getElementById('noiseVal') },
             sizeMode: document.getElementById('sizeModeCheck'),
             conn: document.getElementById('connCheck'),
-            connDist: { input: document.getElementById('connDistSlider'), display: document.getElementById('connDistVal') },
+            connRandom: document.getElementById('randConnCheck'),
+            connFactor: { input: document.getElementById('connFactorSlider'), display: document.getElementById('connFactorVal') },
+            maxLines: { input: document.getElementById('maxLinesSlider'), display: document.getElementById('maxLinesVal') },
             bgExport: document.getElementById('bgExportCheck')
         };
 
@@ -295,6 +311,7 @@
             if (!els.anim.checked) render();
         }
 
+        // Deterministischer Zufall für Positions-basierte Logik
         function pseudoRandom(x, y) {
             return Math.abs(Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1;
         }
@@ -355,9 +372,15 @@
             const hardnessFactor = parseInt(els.hardness.input.value) / 100; 
             const maxSizeFactor = parseInt(els.maxSize.input.value) / 100; 
             const sizeMode = els.sizeMode.checked;
-            // Connections
+            
+            // Connections Config
             const showConn = els.conn.checked;
-            const connDist = parseInt(els.connDist.input.value);
+            const randomConn = els.connRandom.checked;
+            const connFactor = parseInt(els.connFactor.input.value) / 10; // 1.0 bis 5.0
+            const maxLines = parseInt(els.maxLines.input.value);
+            
+            // Die Distanz skaliert nun mit dem Rasterabstand
+            const connDist = spacing * connFactor; 
 
             const centerX = width / 2;
             const centerY = height / 2;
@@ -409,7 +432,64 @@
                     }
                 }
             }
-            return { points, sizeMode, width, height, maxSizeFactor, showConn, connDist };
+            return { points, sizeMode, width, height, maxSizeFactor, showConn, connDist, randomConn, maxLines };
+        }
+
+        function calculateConnections(data) {
+            const lines = [];
+            const maxDist = data.connDist;
+            
+            for (let i = 0; i < data.points.length; i++) {
+                const p1 = data.points[i];
+                let candidates = [];
+                
+                // Wir sammeln potenzielle Kandidaten. 
+                // Da Punkte sortiert sind, schauen wir nur vorwärts um Duplikate zu vermeiden, 
+                // ABER für "Random" Logik schauen wir auch vorwärts, um eine verzweigte Struktur zu erzeugen.
+                // Um es effizient zu halten, bleiben wir beim "forward scanning".
+                
+                for (let j = i + 1; j < data.points.length; j++) {
+                    const p2 = data.points[j];
+                    const dx = p2.x - p1.x;
+                    if (dx > maxDist) break; // Optimierung: Da sortiert nach Spalten/X
+                    
+                    const dy = Math.abs(p2.y - p1.y);
+                    if (dy > maxDist) continue;
+
+                    const dist = Math.hypot(dx, dy);
+                    if (dist <= maxDist) {
+                        candidates.push({ point: p2, dist: dist });
+                    }
+                }
+
+                if (candidates.length === 0) continue;
+
+                // Sortier-Logik
+                if (data.randomConn) {
+                    // Deterministisches "Random" basierend auf Koordinaten
+                    // Damit es nicht flackert und im SVG gleich aussieht.
+                    candidates.sort((a, b) => {
+                        const rA = pseudoRandom(p1.x + a.point.x, p1.y + a.point.y);
+                        const rB = pseudoRandom(p1.x + b.point.x, p1.y + b.point.y);
+                        return rA - rB;
+                    });
+                } else {
+                    // Sortiere nach Distanz (nächste zuerst)
+                    candidates.sort((a, b) => a.dist - b.dist);
+                }
+
+                // Limit anwenden
+                const count = Math.min(candidates.length, data.maxLines);
+                
+                for(let k=0; k < count; k++) {
+                    lines.push({
+                        p1: p1,
+                        p2: candidates[k].point,
+                        opacity: (1 - candidates[k].dist / maxDist) * 0.4
+                    });
+                }
+            }
+            return lines;
         }
 
         function render() {
@@ -421,7 +501,11 @@
             els.spacing.display.innerText = els.spacing.input.value + "px";
             els.maxSize.display.innerText = els.maxSize.input.value + "%";
             els.noise.display.innerText = els.noise.input.value + "%";
-            els.connDist.display.innerText = els.connDist.input.value + "px";
+            els.maxLines.display.innerText = els.maxLines.input.value;
+            
+            const connFact = parseInt(els.connFactor.input.value) / 10;
+            els.connFactor.display.innerText = connFact.toFixed(1) + "x";
+
             const speed = parseInt(els.speed.input.value);
             els.speed.display.innerText = (speed / 10).toFixed(1) + "x";
 
@@ -429,39 +513,18 @@
 
             const data = getRenderData();
             
-            // 1. Draw Connections (Lines) first (behind symbols)
+            // 1. Draw Connections
             if (data.showConn) {
-                const maxDist = data.connDist;
+                const lines = calculateConnections(data);
                 ctx.lineWidth = 0.5;
                 
-                // Optimierung: Punkte sind grob nach X sortiert, da Spaltenweise generiert
-                for (let i = 0; i < data.points.length; i++) {
-                    const p1 = data.points[i];
-                    
-                    // Wir schauen uns nur nachfolgende Punkte an, um Duplikate zu vermeiden
-                    for (let j = i + 1; j < data.points.length; j++) {
-                        const p2 = data.points[j];
-                        
-                        // Abbruchbedingung für X (Da sortiert)
-                        const dx = p2.x - p1.x;
-                        if (dx > maxDist) break; 
-                        
-                        const dy = Math.abs(p2.y - p1.y);
-                        if (dy > maxDist) continue;
-
-                        const dist = Math.hypot(dx, dy);
-                        if (dist <= maxDist) {
-                            // Opacity sinkt mit Distanz
-                            const opacity = (1 - dist / maxDist) * 0.4; // Max 0.4 alpha
-                            
-                            ctx.beginPath();
-                            ctx.strokeStyle = `rgba(0, 255, 255, ${opacity})`;
-                            ctx.moveTo(p1.x, p1.y);
-                            ctx.lineTo(p2.x, p2.y);
-                            ctx.stroke();
-                        }
-                    }
-                }
+                lines.forEach(line => {
+                    ctx.beginPath();
+                    ctx.strokeStyle = `rgba(0, 255, 255, ${line.opacity})`;
+                    ctx.moveTo(line.p1.x, line.p1.y);
+                    ctx.lineTo(line.p2.x, line.p2.y);
+                    ctx.stroke();
+                });
             }
 
             // 2. Draw Symbols
@@ -501,7 +564,6 @@
             let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${data.width} ${data.height}" width="${data.width}px" height="${data.height}px">`;
             
             if (includeBg) {
-                // Gradient Definition hinzufügen um CSS radial-gradient zu matchen
                 svg += `
                 <defs>
                     <radialGradient id="bgGrad" cx="50%" cy="50%" r="71%" fx="50%" fy="50%">
@@ -515,26 +577,13 @@
 
             // 1. Export Connections
             if (data.showConn) {
-                const maxDist = data.connDist;
-                let linesSvg = "";
+                const lines = calculateConnections(data);
                 
-                for (let i = 0; i < data.points.length; i++) {
-                    const p1 = data.points[i];
-                    for (let j = i + 1; j < data.points.length; j++) {
-                        const p2 = data.points[j];
-                        const dx = p2.x - p1.x;
-                        if (dx > maxDist) break;
-                        const dy = Math.abs(p2.y - p1.y);
-                        if (dy > maxDist) continue;
-
-                        const dist = Math.hypot(dx, dy);
-                        if (dist <= maxDist) {
-                            const opacity = ((1 - dist / maxDist) * 0.4).toFixed(3);
-                            linesSvg += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="rgb(0, 255, 255)" stroke-opacity="${opacity}" stroke-width="0.5" />`;
-                        }
-                    }
-                }
-                svg += linesSvg;
+                lines.forEach(line => {
+                     // SVG opacity auf 3 Dezimalstellen runden
+                     const op = line.opacity.toFixed(3);
+                     svg += `<line x1="${line.p1.x}" y1="${line.p1.y}" x2="${line.p2.x}" y2="${line.p2.y}" stroke="rgb(0, 255, 255)" stroke-opacity="${op}" stroke-width="0.5" />`;
+                });
             }
 
             // 2. Export Symbols
