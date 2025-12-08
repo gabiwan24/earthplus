@@ -276,6 +276,51 @@
 
             <div class="divider"></div>
 
+            <!-- Background Section -->
+            <div class="row">
+                <label class="lbl-inline">Background</label>
+            </div>
+            <div class="row">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="bgSphereCheck">
+                    <label for="bgSphereCheck" style="margin:0; font-size:0.7rem; color:#94a3b8; width:auto; cursor:pointer;">Sphere</label>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="bgInnerSphereCheck">
+                    <label for="bgInnerSphereCheck" style="margin:0; font-size:0.7rem; color:#94a3b8; width:auto; cursor:pointer;">Inner</label>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="bgRingCheck">
+                    <label for="bgRingCheck" style="margin:0; font-size:0.7rem; color:#94a3b8; width:auto; cursor:pointer;">Ring</label>
+                </div>
+            </div>
+
+            <!-- New Radius Sliders -->
+            <div class="control-group">
+                <label>
+                    Size: Sphere
+                    <span id="bgSphereSizeVal" class="value">100%</span>
+                </label>
+                <input type="range" id="bgSphereSizeSlider" min="50" max="150" value="100">
+            </div>
+            <div class="control-group">
+                <label>
+                    Size: Inner
+                    <span id="bgInnerSizeVal" class="value">90%</span>
+                </label>
+                <input type="range" id="bgInnerSizeSlider" min="10" max="120" value="90">
+            </div>
+            <div class="control-group">
+                <label>
+                    Size: Ring
+                    <span id="bgRingSizeVal" class="value">105%</span>
+                </label>
+                <input type="range" id="bgRingSizeSlider" min="50" max="150" value="105">
+            </div>
+
+
+            <div class="divider"></div>
+
             <!-- Helligkeit Modus -->
             <div class="row">
                 <label for="sizeModeCheck" class="lbl-inline" style="font-weight:normal; color:#94a3b8;">Größe steuert Helligkeit</label>
@@ -343,7 +388,7 @@
             </div>
         </div>
 
-        <!-- COLOR PANEL (Oben / Separiert) -->
+        <!-- COLOR PANEL -->
         <div class="panel color-panel">
             <div class="row">
                 <div class="row-left">
@@ -390,6 +435,15 @@
             connFactor: { input: document.getElementById('connFactorSlider'), display: document.getElementById('connFactorVal') },
             maxLines: { input: document.getElementById('maxLinesSlider'), display: document.getElementById('maxLinesVal') },
             bgExport: document.getElementById('bgExportCheck'),
+            // Background Sphere/Ring
+            bgSphere: document.getElementById('bgSphereCheck'),
+            bgInnerSphere: document.getElementById('bgInnerSphereCheck'),
+            bgRing: document.getElementById('bgRingCheck'),
+            // New Radius Sliders
+            bgSphereSize: { input: document.getElementById('bgSphereSizeSlider'), display: document.getElementById('bgSphereSizeVal') },
+            bgInnerSize: { input: document.getElementById('bgInnerSizeSlider'), display: document.getElementById('bgInnerSizeVal') },
+            bgRingSize: { input: document.getElementById('bgRingSizeSlider'), display: document.getElementById('bgRingSizeVal') },
+
             // Color Elements
             multiColor: document.getElementById('multiColorCheck'),
             randColor: document.getElementById('randColorCheck'),
@@ -425,15 +479,11 @@
             return Math.abs(Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1;
         }
 
-        // Noise Function für die Clouds (weiche Gradienten)
-        // Einfache Überlagerung von Sinuswellen
         function cloudNoise(x, y) {
             const scale = 0.003;
             const v1 = Math.sin(x * scale + y * scale * 0.5);
             const v2 = Math.cos(x * scale * 0.5 - y * scale);
             const v3 = Math.sin(x * scale * 0.2 + y * scale * 0.2 + 2);
-            
-            // Normalize -1 to 1 -> 0 to 1
             const val = (v1 + v2 + v3) / 3; 
             return val * 0.5 + 0.5;
         }
@@ -444,14 +494,11 @@
                 parseInt(result[1], 16),
                 parseInt(result[2], 16),
                 parseInt(result[3], 16)
-            ] : [0, 255, 255];
+            ] : [0, 212, 255];
         }
 
-        // Interpolation zwischen 4 Farben basierend auf t (0 bis 1)
         function getGradientColor(t, colors) {
-            // Clamp t
             t = Math.max(0, Math.min(1, t));
-            
             let c1, c2, localT;
             if (t < 0.33) {
                 c1 = colors[0]; c2 = colors[1];
@@ -463,14 +510,15 @@
                 c1 = colors[2]; c2 = colors[3];
                 localT = (t - 0.66) / 0.34;
             }
-
             const r = Math.round(c1[0] + (c2[0] - c1[0]) * localT);
             const g = Math.round(c1[1] + (c2[1] - c1[1]) * localT);
             const b = Math.round(c1[2] + (c2[2] - c1[2]) * localT);
             return [r, g, b];
         }
 
-        const COLOR_CYAN_RGB = [0, 255, 255]; 
+        // Neue Standardfarbe #00d4ff (RGB: 0, 212, 255)
+        const COLOR_STD_RGB = [0, 212, 255]; 
+        const COLOR_STD_HEX = "#00d4ff";
 
         function getPlusPathData(x, y, scale, spacing, maxSizeFactor) {
             const maxSize = spacing * maxSizeFactor; 
@@ -482,23 +530,17 @@
 
         function drawSinglePathPlus(x, y, scale, spacing, sizeMode, maxSizeFactor, colorRgb) {
             ctx.beginPath();
-            
             let drawScale = scale;
             let alpha = scale;
-
             if (sizeMode) {
                 alpha = 1.0;
                 drawScale = Math.pow(scale, 1.5); 
             }
-            
             ctx.fillStyle = `rgba(${colorRgb[0]}, ${colorRgb[1]}, ${colorRgb[2]}, ${alpha})`;
-
             const maxSize = spacing * maxSizeFactor; 
             const size = maxSize * drawScale;
-            
             const s = size / 2;
             const t = Math.max(0.5, size * 0.15); 
-
             ctx.moveTo(x - t, y - s); 
             ctx.lineTo(x + t, y - s); 
             ctx.lineTo(x + t, y - t); 
@@ -537,9 +579,26 @@
             const isCloudsColor = els.cloudsColor.checked;
             const activeColors = els.colors.map(el => hexToRgb(el.value));
 
+            // Background Config
+            const showSphere = els.bgSphere.checked;
+            const showInnerSphere = els.bgInnerSphere.checked;
+            const showRing = els.bgRing.checked;
+
+            // Größen Faktoren
+            const sphereScale = parseInt(els.bgSphereSize.input.value) / 100;
+            const innerSphereScale = parseInt(els.bgInnerSize.input.value) / 100;
+            const ringScale = parseInt(els.bgRingSize.input.value) / 100;
+
+
             const centerX = width / 2;
             const centerY = height / 2;
             const moonRadius = minDim * 0.35; 
+            
+            // Berechnete Radien für die Elemente
+            const sphereRadius = moonRadius * sphereScale;
+            const innerSphereRadius = moonRadius * innerSphereScale;
+            const ringRadius = moonRadius * ringScale;
+
             
             const shadowOffset = moonRadius * crescentFactor; 
             const blurFactor = 1.5 - (hardnessFactor * 1.4); 
@@ -548,6 +607,10 @@
             const angleRad = (angleDeg * Math.PI) / 180;
             const shadowX = centerX - Math.cos(angleRad) * shadowOffset;
             const shadowY = centerY - Math.sin(angleRad) * shadowOffset;
+
+            // Für die Sphere Light Position (rotiert mit)
+            const lightVecX = Math.cos(angleRad);
+            const lightVecY = Math.sin(angleRad);
 
             const scanRadius = moonRadius + spacing + blurSize/2;
             const startCol = Math.floor((centerX - scanRadius) / spacing);
@@ -579,19 +642,16 @@
                     }
 
                     if (intensity > 0.05) {
-                        let ptColor = COLOR_CYAN_RGB;
+                        let ptColor = COLOR_STD_RGB;
                         if (isMultiColor) {
                             if (isRandomColor) {
-                                // Random
                                 const randVal = pseudoRandom(i * 13, j * 7);
                                 const index = Math.floor(randVal * 4);
                                 ptColor = activeColors[index];
                             } else if (isCloudsColor) {
-                                // Clouds (Noise Gradient)
                                 const t = cloudNoise(x, y);
                                 ptColor = getGradientColor(t, activeColors);
                             } else {
-                                // Standard Gradient (Linear)
                                 let t = x / width;
                                 ptColor = getGradientColor(t, activeColors);
                             }
@@ -600,7 +660,11 @@
                     }
                 }
             }
-            return { points, sizeMode, width, height, maxSizeFactor, showConn, connDist, randomConn, maxLines };
+            return { 
+                points, sizeMode, width, height, maxSizeFactor, showConn, connDist, randomConn, maxLines, 
+                showSphere, showInnerSphere, showRing, moonRadius, centerX, centerY, lightVecX, lightVecY, angleRad,
+                sphereRadius, innerSphereRadius, ringRadius
+            };
         }
 
         function calculateConnections(data) {
@@ -610,23 +674,16 @@
             for (let i = 0; i < data.points.length; i++) {
                 const p1 = data.points[i];
                 let candidates = [];
-                
                 for (let j = i + 1; j < data.points.length; j++) {
                     const p2 = data.points[j];
                     const dx = p2.x - p1.x;
                     if (dx > maxDist) break;
-                    
                     const dy = Math.abs(p2.y - p1.y);
                     if (dy > maxDist) continue;
-
                     const dist = Math.hypot(dx, dy);
-                    if (dist <= maxDist) {
-                        candidates.push({ point: p2, dist: dist });
-                    }
+                    if (dist <= maxDist) candidates.push({ point: p2, dist: dist });
                 }
-
                 if (candidates.length === 0) continue;
-
                 if (data.randomConn) {
                     candidates.sort((a, b) => {
                         const rA = pseudoRandom(p1.x + a.point.x, p1.y + a.point.y);
@@ -636,7 +693,6 @@
                 } else {
                     candidates.sort((a, b) => a.dist - b.dist);
                 }
-
                 const count = Math.min(candidates.length, data.maxLines);
                 for(let k=0; k < count; k++) {
                     lines.push({
@@ -649,8 +705,27 @@
             return lines;
         }
 
+        function drawSphere(ctx, x, y, radius, lightVecX, lightVecY) {
+            // Linearer Verlauf basierend auf Licht
+            const r = radius;
+            const startX = x + lightVecX * r;
+            const startY = y + lightVecY * r;
+            const endX = x - lightVecX * r;
+            const endY = y - lightVecY * r;
+
+            const grad = ctx.createLinearGradient(startX, startY, endX, endY);
+            // Nutze Standard-Farbvariablen für Konsistenz mit Export
+            grad.addColorStop(0, `rgba(${COLOR_STD_RGB.join(',')}, 0.2)`);
+            grad.addColorStop(1, `rgba(${COLOR_STD_RGB.join(',')}, 0.0)`);
+
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.fillStyle = grad;
+            ctx.fill();
+        }
+
         function render() {
-            // UI Text Updates
+            // UI Updates
             const angleVal = parseFloat(els.angle.input.value).toFixed(0);
             els.angle.display.innerText = angleVal + "°";
             els.crescent.display.innerText = (parseInt(els.crescent.input.value) / 100).toFixed(1);
@@ -664,8 +739,24 @@
             const speed = parseInt(els.speed.input.value);
             els.speed.display.innerText = (speed / 10).toFixed(1) + "x";
 
+            // Neue Slider Display Values
+            els.bgSphereSize.display.innerText = els.bgSphereSize.input.value + "%";
+            els.bgInnerSize.display.innerText = els.bgInnerSize.input.value + "%";
+            els.bgRingSize.display.innerText = els.bgRingSize.input.value + "%";
+
+
             ctx.clearRect(0, 0, width, height);
             const data = getRenderData();
+            
+            // 0. Draw Background Sphere
+            if (data.showSphere) {
+                drawSphere(ctx, data.centerX, data.centerY, data.sphereRadius, data.lightVecX, data.lightVecY);
+            }
+            
+            // 0.5 Draw Inner Sphere
+            if (data.showInnerSphere) {
+                drawSphere(ctx, data.centerX, data.centerY, data.innerSphereRadius, data.lightVecX, data.lightVecY);
+            }
             
             // 1. Draw Connections
             if (data.showConn) {
@@ -685,6 +776,15 @@
             data.points.forEach(p => {
                 drawSinglePathPlus(p.x, p.y, p.intensity, p.spacing, data.sizeMode, data.maxSizeFactor, p.color);
             });
+
+            // 3. Draw Background Ring (Verschoben nach hinten, damit er vorne liegt)
+            if (data.showRing) {
+                ctx.beginPath();
+                ctx.arc(data.centerX, data.centerY, data.ringRadius, 0, Math.PI * 2);
+                ctx.strokeStyle = COLOR_STD_HEX; // Neue Standardfarbe
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            }
         }
 
         function animate() {
@@ -709,18 +809,54 @@
             
             let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${data.width} ${data.height}" width="${data.width}px" height="${data.height}px">`;
             
-            if (includeBg) {
+            svg += `<defs>`;
+            
+            // Background Plane Gradient
+            // Force circle via userSpaceOnUse so it doesn't skew on wide screens
+            const maxDim = Math.max(data.width, data.height);
+            // r should be roughly enough to cover corners. 71% of maxDim centered.
+            svg += `
+                <radialGradient id="bgGrad" cx="${data.width/2}" cy="${data.height/2}" r="${maxDim * 0.71}" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" style="stop-color:#001e45;stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#000510;stop-opacity:1" />
+                </radialGradient>
+            `;
+            
+            // Sphere Linear Gradient
+            if (data.showSphere || data.showInnerSphere) {
+                const cosA = Math.cos(data.angleRad);
+                const sinA = Math.sin(data.angleRad);
+                
+                const x1 = 0.5 + cosA * 0.5;
+                const y1 = 0.5 + sinA * 0.5;
+                const x2 = 0.5 - cosA * 0.5;
+                const y2 = 0.5 - sinA * 0.5;
+
                 svg += `
-                <defs>
-                    <radialGradient id="bgGrad" cx="50%" cy="50%" r="71%" fx="50%" fy="50%">
-                        <stop offset="0%" style="stop-color:#001e45;stop-opacity:1" />
-                        <stop offset="100%" style="stop-color:#000510;stop-opacity:1" />
-                    </radialGradient>
-                </defs>
-                <rect width="100%" height="100%" fill="url(#bgGrad)"/>
+                <linearGradient id="sphereGrad" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}">
+                    <stop offset="0%" style="stop-color:${COLOR_STD_HEX};stop-opacity:0.2" />
+                    <stop offset="100%" style="stop-color:${COLOR_STD_HEX};stop-opacity:0" />
+                </linearGradient>
                 `;
             }
+            
+            svg += `</defs>`;
+            
+            if (includeBg) {
+                svg += `<rect width="100%" height="100%" fill="url(#bgGrad)"/>`;
+            }
 
+            // Export Sphere
+            if (data.showSphere) {
+                svg += `<circle cx="${data.centerX}" cy="${data.centerY}" r="${data.sphereRadius}" fill="url(#sphereGrad)" />`;
+            }
+            
+            // Export Inner Sphere
+            if (data.showInnerSphere) {
+                svg += `<circle cx="${data.centerX}" cy="${data.centerY}" r="${data.innerSphereRadius}" fill="url(#sphereGrad)" />`;
+            }
+
+            // Connections
             if (data.showConn) {
                 const lines = calculateConnections(data);
                 lines.forEach(line => {
@@ -731,6 +867,7 @@
                 });
             }
 
+            // Symbols
             data.points.forEach(p => {
                 let drawScale = p.intensity;
                 let opacity = p.intensity.toFixed(2);
@@ -743,6 +880,11 @@
                 const opacityAttr = opacity === "1" ? "" : `fill-opacity="${opacity}"`;
                 svg += `<path d="${d}" fill="${fill}" ${opacityAttr} />`;
             });
+
+            // Export Ring (Last = On Top)
+            if (data.showRing) {
+                svg += `<circle cx="${data.centerX}" cy="${data.centerY}" r="${data.ringRadius}" fill="none" stroke="${COLOR_STD_HEX}" stroke-width="1.5" />`;
+            }
 
             svg += `</svg>`;
             const blob = new Blob([svg], {type: "image/svg+xml;charset=utf-8"});
