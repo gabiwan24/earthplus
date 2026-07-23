@@ -21,6 +21,10 @@
             -webkit-user-select: none;
         }
 
+        body.black-background {
+            background: #000000;
+        }
+
         canvas {
             background-color: transparent; 
             touch-action: none; 
@@ -281,6 +285,12 @@
                 <label class="lbl-inline">Background</label>
             </div>
             <div class="row">
+                <div class="row-left">
+                    <label for="blackBgCheck" class="lbl-inline" style="font-weight:normal; color:#94a3b8;">Schwarzer Hintergrund</label>
+                    <input type="checkbox" id="blackBgCheck">
+                </div>
+            </div>
+            <div class="row">
                 <div style="display:flex; align-items:center; gap:8px;">
                     <input type="checkbox" id="bgSphereCheck">
                     <label for="bgSphereCheck" style="margin:0; font-size:0.7rem; color:#94a3b8; width:auto; cursor:pointer;">Sphere</label>
@@ -435,6 +445,7 @@
             connFactor: { input: document.getElementById('connFactorSlider'), display: document.getElementById('connFactorVal') },
             maxLines: { input: document.getElementById('maxLinesSlider'), display: document.getElementById('maxLinesVal') },
             bgExport: document.getElementById('bgExportCheck'),
+            blackBg: document.getElementById('blackBgCheck'),
             // Background Sphere/Ring
             bgSphere: document.getElementById('bgSphereCheck'),
             bgInnerSphere: document.getElementById('bgInnerSphereCheck'),
@@ -459,6 +470,23 @@
         let width, height, minDim;
         const dpr = window.devicePixelRatio || 1;
         let animationFrameId;
+
+        function applyBlackBackground() {
+            const active = Boolean(els.blackBg.checked);
+            document.body.classList.toggle('black-background', active);
+            return active;
+        }
+
+        function setBlackBackground(enabled = true) {
+            els.blackBg.checked = Boolean(enabled);
+            applyBlackBackground();
+            render();
+            return els.blackBg.checked;
+        }
+
+        function toggleBlackBackground() {
+            return setBlackBackground(!els.blackBg.checked);
+        }
 
         function resize() {
             width = window.innerWidth;
@@ -580,6 +608,7 @@
             const activeColors = els.colors.map(el => hexToRgb(el.value));
 
             // Background Config
+            const blackBackground = els.blackBg.checked;
             const showSphere = els.bgSphere.checked;
             const showInnerSphere = els.bgInnerSphere.checked;
             const showRing = els.bgRing.checked;
@@ -662,7 +691,7 @@
             }
             return { 
                 points, sizeMode, width, height, maxSizeFactor, showConn, connDist, randomConn, maxLines, 
-                showSphere, showInnerSphere, showRing, moonRadius, centerX, centerY, lightVecX, lightVecY, angleRad,
+                blackBackground, showSphere, showInnerSphere, showRing, moonRadius, centerX, centerY, lightVecX, lightVecY, angleRad,
                 sphereRadius, innerSphereRadius, ringRadius
             };
         }
@@ -725,6 +754,8 @@
         }
 
         function render() {
+            applyBlackBackground();
+
             // UI Updates
             const angleVal = parseFloat(els.angle.input.value).toFixed(0);
             els.angle.display.innerText = angleVal + "°";
@@ -843,7 +874,8 @@
             svg += `</defs>`;
             
             if (includeBg) {
-                svg += `<rect width="100%" height="100%" fill="url(#bgGrad)"/>`;
+                const backgroundFill = data.blackBackground ? '#000000' : 'url(#bgGrad)';
+                svg += `<rect width="100%" height="100%" fill="${backgroundFill}"/>`;
             }
 
             // Export Sphere
@@ -958,11 +990,15 @@
             recorderBackgroundGradient.addColorStop(1, '#000510');
         }
 
+        function getRecorderBackgroundFill() {
+            return els.blackBg.checked ? '#000000' : recorderBackgroundGradient;
+        }
+
         function drawRecorderFrame() {
             const recordingActive = mediaRecorder && mediaRecorder.state !== 'inactive';
             if (!recordingActive) return;
 
-            recorderCtx.fillStyle = recorderBackgroundGradient;
+            recorderCtx.fillStyle = getRecorderBackgroundFill();
             recorderCtx.fillRect(0, 0, recorderCanvas.width, recorderCanvas.height);
 
             // Nur der Zeichen-Canvas wird kopiert. Die HTML-Bedienelemente liegen
@@ -1089,7 +1125,7 @@
                 }, { once: true });
 
                 // Erstes vollständiges Bild vor dem Start bereitstellen.
-                recorderCtx.fillStyle = recorderBackgroundGradient;
+                recorderCtx.fillStyle = getRecorderBackgroundFill();
                 recorderCtx.fillRect(0, 0, recorderCanvas.width, recorderCanvas.height);
                 recorderCtx.drawImage(canvas, 0, 0, recorderCanvas.width, recorderCanvas.height);
 
@@ -1164,6 +1200,18 @@
                 stopScreenRecording();
             }
         });
+
+        // Programmgesteuerte Hintergrundsteuerung.
+        window.setBlackBackground = setBlackBackground;
+        window.toggleBlackBackground = toggleBlackBackground;
+        window.backgroundControls = {
+            enableBlack: () => setBlackBackground(true),
+            disableBlack: () => setBlackBackground(false),
+            toggleBlack: toggleBlackBackground,
+            get blackActive() {
+                return els.blackBg.checked;
+            }
+        };
 
         // Programmgesteuerte Steuerung ohne sichtbare Recorder-UI.
         window.screenRecorder = {
