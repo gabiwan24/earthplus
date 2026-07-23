@@ -897,6 +897,291 @@
             document.body.removeChild(link);
         }
 
+        // ============================================================
+        // UNSICHTBARER MP4-SCREENRECORDER
+        // Start/Stop: Umschalt + R | Stop: Escape
+        // Aufgenommen wird ausschließlich die Visualisierung (ohne DOM-UI).
+        // Zusätzlich verfügbar: window.screenRecorder.start()/stop()/toggle()
+        // ============================================================
+        const RECORDER_FPS = 60;
+        const RECORDER_VIDEO_BITS_PER_SECOND = 40_000_000;
+        const recorderCanvas = document.createElement('canvas');
+        const recorderCtx = recorderCanvas.getContext('2d', { alpha: false });
+
+        let mediaRecorder = null;
+        let recorderStream = null;
+        let recorderChunks = [];
+        let recorderFrameId = null;
+        let recorderBackgroundGradient = null;
+        let recorderMimeType = '';
+        let recordingStartedAt = 0;
+
+        function getSupportedMp4Types() {
+            if (!window.MediaRecorder) return [];
+
+            // H.264/AVC in einem MP4-Container. Die Reihenfolge bevorzugt
+            // Profile für hohe Auflösungen, fällt aber auf generisches MP4 zurück.
+            const candidates = [
+                'video/mp4;codecs=avc1.640034',
+                'video/mp4;codecs=avc3.640034',
+                'video/mp4;codecs=avc1.64002A',
+                'video/mp4;codecs=avc3.64002A',
+                'video/mp4;codecs=avc1.4D402A',
+                'video/mp4;codecs=avc1.42E02A',
+                'video/mp4'
+            ];
+
+            if (typeof MediaRecorder.isTypeSupported !== 'function') {
+                return ['video/mp4'];
+            }
+
+            return candidates.filter(type => MediaRecorder.isTypeSupported(type));
+        }
+
+        function prepareRecorderCanvas() {
+            if (!canvas.width || !canvas.height) resize();
+
+            // Die Auflösung bleibt während einer Aufnahme konstant. Dadurch wird
+            // auch bei einer Fenstergrößenänderung ein stabiler MP4-Stream erzeugt.
+            recorderCanvas.width = Math.max(1, canvas.width);
+            recorderCanvas.height = Math.max(1, canvas.height);
+
+            const centerX = recorderCanvas.width / 2;
+            const centerY = recorderCanvas.height / 2;
+            const radius = Math.hypot(centerX, centerY);
+
+            recorderBackgroundGradient = recorderCtx.createRadialGradient(
+                centerX, centerY, 0,
+                centerX, centerY, radius
+            );
+            recorderBackgroundGradient.addColorStop(0, '#001e45');
+            recorderBackgroundGradient.addColorStop(1, '#000510');
+        }
+
+        function drawRecorderFrame() {
+            const recordingActive = mediaRecorder && mediaRecorder.state !== 'inactive';
+            if (!recordingActive) return;
+
+            recorderCtx.fillStyle = recorderBackgroundGradient;
+            recorderCtx.fillRect(0, 0, recorderCanvas.width, recorderCanvas.height);
+
+            // Nur der Zeichen-Canvas wird kopiert. Die HTML-Bedienelemente liegen
+            // außerhalb dieses Canvas und können daher nicht im Video erscheinen.
+            recorderCtx.drawImage(
+                canvas,
+                0, 0, canvas.width, canvas.height,
+                0, 0, recorderCanvas.width, recorderCanvas.height
+            );
+
+            recorderFrameId = requestAnimationFrame(drawRecorderFrame);
+        }
+
+        function createMp4MediaRecorder(stream) {
+            const supportedTypes = getSupportedMp4Types();
+            if (supportedTypes.length === 0) {
+                throw new Error('Dieser Browser unterstützt keine MP4-Aufnahme mit MediaRecorder.');
+            }
+
+            let lastError = null;
+            for (const mimeType of supportedTypes) {
+                try {
+                    const recorder = new MediaRecorder(stream, {
+                        mimeType,
+                        videoBitsPerSecond: RECORDER_VIDEO_BITS_PER_SECOND
+                    });
+                    return recorder;
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+
+            throw lastError || new Error('MP4-Recorder konnte nicht initialisiert werden.');
+        }
+
+        function buildRecordingFilename() {
+            const now = new Date();
+            const pad = value => String(value).padStart(2, '0');
+            const timestamp = [
+                now.getFullYear(),
+                pad(now.getMonth() + 1),
+                pad(now.getDate())
+            ].join('-') + '_' + [
+                pad(now.getHours()),
+                pad(now.getMinutes()),
+                pad(now.getSeconds())
+            ].join('-');
+
+            return `moon_pattern_${timestamp}_40mbit.mp4`;
+        }
+
+        function cleanupRecorder() {
+            if (recorderFrameId) {
+                cancelAnimationFrame(recorderFrameId);
+                recorderFrameId = null;
+            }
+
+            if (recorderStream) {
+                recorderStream.getTracks().forEach(track => track.stop());
+                recorderStream = null;
+            }
+        }
+
+        function downloadRecording() {
+            const blob = new Blob(recorderChunks, {
+                type: recorderMimeType || 'video/mp4'
+            });
+
+            if (blob.size === 0) {
+                console.error('[ScreenRecorder] Die Aufnahme enthält keine Videodaten.');
+                return;
+            }
+
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = buildRecordingFilename();
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+
+            setTimeout(() => URL.revokeObjectURL(url), 30_000);
+
+            const durationSeconds = recordingStartedAt
+                ? ((performance.now() - recordingStartedAt) / 1000).toFixed(1)
+                : '?';
+            console.info(
+                `[ScreenRecorder] MP4 gespeichert: ${(blob.size / 1024 / 1024).toFixed(1)} MB, ` +
+                `${durationSeconds} s, ${recorderMimeType || 'video/mp4'}`
+            );
+        }
+
+        function startScreenRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') return false;
+
+            if (!recorderCtx || typeof recorderCanvas.captureStream !== 'function') {
+                console.error('[ScreenRecorder] Canvas-Aufnahme wird von diesem Browser nicht unterstützt.');
+                return false;
+            }
+
+            try {
+                prepareRecorderCanvas();
+                recorderChunks = [];
+                recorderStream = recorderCanvas.captureStream(RECORDER_FPS);
+                mediaRecorder = createMp4MediaRecorder(recorderStream);
+                recorderMimeType = mediaRecorder.mimeType || 'video/mp4';
+
+                mediaRecorder.addEventListener('dataavailable', event => {
+                    if (event.data && event.data.size > 0) recorderChunks.push(event.data);
+                });
+
+                mediaRecorder.addEventListener('error', event => {
+                    console.error('[ScreenRecorder] Aufnahmefehler:', event.error || event);
+                    cleanupRecorder();
+                });
+
+                mediaRecorder.addEventListener('stop', () => {
+                    cleanupRecorder();
+                    downloadRecording();
+                    window.dispatchEvent(new CustomEvent('screenrecorder:stop', {
+                        detail: { mimeType: recorderMimeType }
+                    }));
+                }, { once: true });
+
+                // Erstes vollständiges Bild vor dem Start bereitstellen.
+                recorderCtx.fillStyle = recorderBackgroundGradient;
+                recorderCtx.fillRect(0, 0, recorderCanvas.width, recorderCanvas.height);
+                recorderCtx.drawImage(canvas, 0, 0, recorderCanvas.width, recorderCanvas.height);
+
+                mediaRecorder.start(1000);
+                recordingStartedAt = performance.now();
+                drawRecorderFrame();
+
+                const actualMbps = mediaRecorder.videoBitsPerSecond
+                    ? (mediaRecorder.videoBitsPerSecond / 1_000_000).toFixed(1)
+                    : 'unbekannt';
+                console.info(
+                    `[ScreenRecorder] Aufnahme gestartet: ${recorderCanvas.width}x${recorderCanvas.height}, ` +
+                    `${RECORDER_FPS} FPS, angefordert 40 Mbit/s, Recorder meldet ${actualMbps} Mbit/s, ` +
+                    `${recorderMimeType}. Stop mit Umschalt+R oder Escape.`
+                );
+
+                window.dispatchEvent(new CustomEvent('screenrecorder:start', {
+                    detail: {
+                        width: recorderCanvas.width,
+                        height: recorderCanvas.height,
+                        fps: RECORDER_FPS,
+                        requestedBitsPerSecond: RECORDER_VIDEO_BITS_PER_SECOND,
+                        reportedBitsPerSecond: mediaRecorder.videoBitsPerSecond || null,
+                        mimeType: recorderMimeType
+                    }
+                }));
+                return true;
+            } catch (error) {
+                cleanupRecorder();
+                mediaRecorder = null;
+                console.error('[ScreenRecorder] Start fehlgeschlagen:', error);
+                return false;
+            }
+        }
+
+        function stopScreenRecording() {
+            if (!mediaRecorder || mediaRecorder.state === 'inactive') return false;
+
+            if (recorderFrameId) {
+                cancelAnimationFrame(recorderFrameId);
+                recorderFrameId = null;
+            }
+
+            mediaRecorder.stop();
+            return true;
+        }
+
+        function toggleScreenRecording() {
+            return mediaRecorder && mediaRecorder.state !== 'inactive'
+                ? stopScreenRecording()
+                : startScreenRecording();
+        }
+
+        window.addEventListener('keydown', event => {
+            if (event.repeat) return;
+
+            const isToggleShortcut =
+                event.code === 'KeyR' &&
+                event.shiftKey &&
+                !event.ctrlKey &&
+                !event.altKey &&
+                !event.metaKey;
+
+            if (isToggleShortcut) {
+                event.preventDefault();
+                toggleScreenRecording();
+                return;
+            }
+
+            if (event.code === 'Escape' && mediaRecorder && mediaRecorder.state !== 'inactive') {
+                event.preventDefault();
+                stopScreenRecording();
+            }
+        });
+
+        // Programmgesteuerte Steuerung ohne sichtbare Recorder-UI.
+        window.screenRecorder = {
+            start: startScreenRecording,
+            stop: stopScreenRecording,
+            toggle: toggleScreenRecording,
+            get state() {
+                return mediaRecorder ? mediaRecorder.state : 'inactive';
+            },
+            get settings() {
+                return {
+                    fps: RECORDER_FPS,
+                    requestedBitsPerSecond: RECORDER_VIDEO_BITS_PER_SECOND,
+                    mimeType: recorderMimeType || null
+                };
+            }
+        };
+
         window.addEventListener('resize', resize);
         function queueRender() {
             if (els.anim.checked && this !== els.anim) return; 
